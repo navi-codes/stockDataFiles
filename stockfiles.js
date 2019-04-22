@@ -1,6 +1,5 @@
 const fs = require('fs')
 const csv = require('fast-csv')
-const moment = require('moment')
 const _ = require('lodash');
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 companyName=null
@@ -8,7 +7,8 @@ previousTime=null
 fileDataHash = []
 
 function execute(){
-  fs.createReadStream('file3.csv')
+  fileName = 'file2'
+  fs.createReadStream(fileName+'.csv')
   .pipe(csv())
   .on('data',function(data){
     fileData(data)
@@ -33,11 +33,11 @@ function fileData(data){
     openInterest: data[8]
   }
   newData = checkNextTime(writeData)
-  pushUpdatedDate(newData)
+  pushUpdatedData(newData)
   fileDataHash.push(writeData)
 }
 
-function pushUpdatedDate(newData){
+function pushUpdatedData(newData){
   if (!newData.res){
     nextTime=newData.startTime
     _.times(newData.timeGap, () => {
@@ -51,6 +51,7 @@ function pushUpdatedDate(newData){
 function checkNextTime(checkdata){
   if(checkdata.ticker != companyName){
     endOfFile(checkdata)
+    startOfFile(checkdata)
   }
   if(previousTime==null){
     previousTime=checkdata.time
@@ -60,7 +61,7 @@ function checkNextTime(checkdata){
   }else{
     checkTime = timeIncrement(previousTime)
   }
-  if(checkdata.time==checktime){
+  if(checkdata.time==checkTime){
     previousTime=checkdata.time
     previousData = checkdata.close
     previoueVolume = checkdata.volume
@@ -71,11 +72,11 @@ function checkNextTime(checkdata){
 }
 
 function endOfFile(checkdata){
-  eofTime='15:59:59'
+  closeTime='15:59:59'
   if(companyName!=null){
-    if(previousTime != eofTime){
-      checkdata.lastTime=timeIncrement(eofTime)
-      pushUpdatedDate(timeDifference(checkdata))
+    if(previousTime != closeTime){
+      checkdata.checkTime=timeIncrement(closeTime)
+      pushUpdatedData(timeDifference(checkdata))
     }
     writeFile(companyName)
   }
@@ -83,29 +84,33 @@ function endOfFile(checkdata){
   companyName=checkdata.ticker
 }
 
+function startOfFile(checkdata){
+  openTime='09:15:59'
+  if(companyName!=null){
+    if(checkdata.time != openTime){
+      checkdata.checkTime = '09:14:59'
+      checkdata.start=true
+      pushUpdatedData(timeDifference(checkdata))
+    }
+  }
+}
+
 function timeIncrement(time){
-  intTime = time.split(':')
-  hour = parseInt(intTime[0]);
-  minute = parseInt(intTime[1])+1;
-  hour = hour + Math.floor(minute/60);
-  hour = hour%24
-  second = parseInt(intTime[2]);
-  minute = minute + Math.floor(second/60);
-  minute = minute%60;
-  second = second%60;
-  checktime = hour+':'+minute+':'+second
-  return(checktime)
+  inTime = new Date('2019-04-22 '+time);
+  inTime.setMinutes( inTime.getMinutes() +1 );
+  incrementedTime = (inTime.getHours()+':'+inTime.getMinutes()+':'+inTime.getSeconds())
+  return(incrementedTime)
 }
 
 function timeDifference(checkdata){
-  eofTime=(('lastTime' in checkdata)?checkdata.lastTime:checkdata.time)
+  inTime=(('checkTime' in checkdata)?checkdata.checkTime:checkdata.time)
   dummy_date='2019-04-17 '
-  startTime=previousTime
-  updateData = previousData
-  updateVolume = previoueVolume
+  startTime=(('start' in checkdata) ? inTime:previousTime)
+  updateData =(('start' in checkdata)?checkdata.open:previousData)
+  updateVolume =(('start' in checkdata)?checkdata.volume:previoueVolume)
   previousTime = new Date(dummy_date+previousTime)
-  currentTime = new Date(dummy_date+eofTime)
-  timeGap=(((currentTime - previousTime)/60000)-1)//60000 second to minute conversion
+  currentTime = new Date(dummy_date+inTime)
+  timeGap=(Math.abs((currentTime - previousTime)/60000)-1)
   previousTime=checkdata.time
   previousData = checkdata.close
   previoueVolume = checkdata.volume
@@ -134,8 +139,9 @@ function updateFile(newData,writeData,nextTime){
 }
 
 function writeFile(fileName){
+  isAppend=fs.existsSync('./splitfiles/'+companyName+'.csv')
   csvWriter = createCsvWriter({
-    path: './file3/'+fileName+'.csv',
+    path: './splitfiles/'+fileName+'.csv',
     header: [
     {id: 'ticker', title: 'Ticker'},
     {id: 'date', title: 'Date'},
@@ -146,7 +152,8 @@ function writeFile(fileName){
     {id: 'close', title: 'Close'},
     {id: 'volume', title: 'Volume'},
     {id: 'openInterest', title: 'Open Interest'}
-    ]
+    ],
+    append:isAppend
   });
   csvWriter.writeRecords(fileDataHash)
   fileDataHash = []
